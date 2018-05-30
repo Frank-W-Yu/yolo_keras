@@ -27,8 +27,9 @@ def parse_args():
 
     argparser.add_argument('-s', '--starting_file', default=0)
     argparser.add_argument('-b', '--batch_size', default=900)
-    argparser.add_argument('-m', '--max_batches', default=None)
+    argparser.add_argument('-m', '--max_batches', default=0)
     argparser.add_argument('-r', '--regions', default=[13, 13])
+    argparser.add_argument('-p', '--load_previous_trained', default='F')
     args = argparser.parse_args()
     return args
 
@@ -287,13 +288,13 @@ def recur_train(model, class_names, anchors, image_data, boxes, detectors_mask, 
     :param validation_split:
     :return:
     '''
-    model.compile(optimizer='adam', loss={'yolo_loss':lambda y_true, y_pred: y_pred})
+    # model.compile(optimizer='adam', loss={'yolo_loss':lambda y_true, y_pred: y_pred})
     logging = TensorBoard()
     checkpoint = ModelCheckpoint("trained_stage_3_best.h5", monitor='val_loss',
                                  save_weights_only=True, save_best_only=True)
     early_stopping = EarlyStopping(monitor='val_loss', min_delta=0, patience=15, verbose=1, mode='auto')
 
-    model.compile(optimizer='adam', loss={'yolo_loss':lambda y_true, y_pred: y_pred})
+    # model.compile(optimizer='adam', loss={'yolo_loss':lambda y_true, y_pred: y_pred})
     model.fit([image_data, boxes, detectors_mask, matching_true_boxes],
               np.zeros(len(image_data)),
               validation_split=validation_split,
@@ -317,14 +318,11 @@ def draw(model_body, class_names, anchors, image_data, image_set='val',
     Draw bounding boxes on image data
     '''
     if image_set == 'train':
-        image_data = np.array([np.expand_dims(image, axis=0)
-            for image in image_data[:int(len(image_data)*.9)]])
+        image_data = np.array([np.expand_dims(image, axis=0) for image in image_data[:int(len(image_data)*.9)]])
     elif image_set == 'val':
-        image_data = np.array([np.expand_dims(image, axis=0)
-            for image in image_data[int(len(image_data)*.9):]])
+        image_data = np.array([np.expand_dims(image, axis=0) for image in image_data[int(len(image_data)*.9):]])
     elif image_set == 'all':
-        image_data = np.array([np.expand_dims(image, axis=0)
-            for image in image_data])
+        image_data = np.array([np.expand_dims(image, axis=0) for image in image_data])
     else:
         ValueError("draw argument image_set must be 'train', 'val', or 'all'")
     # model.load_weights(weights_name)
@@ -340,7 +338,7 @@ def draw(model_body, class_names, anchors, image_data, image_set='val',
     # Run prediction on overfit image.
     sess = K.get_session()  # TODO: Remove dependence on Tensorflow session.
 
-    if  not os.path.exists(out_path):
+    if not os.path.exists(out_path):
         os.makedirs(out_path)
     for i in range(len(image_data)):
         out_boxes, out_scores, out_classes = sess.run(
@@ -395,39 +393,55 @@ def get_regions(region):
     regions = [int(i) for i in regions]
     return regions
 
+def get_starting_file(arg, batch_size):
+    if isinstance(arg, int):
+        return arg
+    else:
+        return int(arg) * batch_size
+
 def main():
     args = parse_args()
     image_path = args.image_path
     label_path = args.label_path
     class_names = get_class_names(args.class_names)
-    starting_file = args.starting_file
     batch_size = int(args.batch_size)
+    starting_file = get_starting_file(args.starting_file, batch_size)
     regions = get_regions(args.regions)
     anchors_path = args.anchors_path
     max_batches = int(args.max_batches)
+    previous_train = args.load_previous_trained
 
     anchors = get_anchors(anchors_path, regions)
-    model_body, model = create_model(anchors, class_names, regions)
 
-    if not max_batches:
+    if previous_train == 'T':
+        model_body, model = create_model(anchors, class_names, regions, load_pretrained=False, freeze_body=False)
+        model.load_weights('trained_stage_3_best.h5')
+    else:
+        model_body, model = create_model(anchors, class_names, regions)
+
+    if max_batches == 0:
         max_batches = get_max_batches(image_path, batch_size)
 
     processed_images, processed_labels = process_data(image_path, label_path, starting_file,
                                                       batch_size, regions)
+    # draw(model_body, class_names, anchors, processed_images,
+    #      image_set='val', weights_name='trained_stage_3.h5', save_all=False)
     # '''
     detectors_mask, matching_true_boxes = get_detector_mask(processed_labels, anchors, regions)
+    print('*'*10, 'Start Initial Training', '*'*10)
     model = initial_train(model, class_names, anchors, processed_images, processed_labels,
           detectors_mask, matching_true_boxes, regions)
 
     for i in range(1, max_batches):
         processed_images, processed_labels = process_data(image_path, label_path, starting_file+i*batch_size, batch_size, regions)
         detectors_mask, matching_true_boxes = get_detector_mask(processed_labels, anchors, regions)
+        print('*'*10, 'Start {}th Training'.format(i), '*'*10)
         model = recur_train(model, class_names, anchors, processed_images, processed_labels,
               detectors_mask, matching_true_boxes, regions)
 
-    # '''
     draw(model_body, class_names, anchors, processed_images,
-         image_set='val', weights_name='trained_stage_3_best.h5', save_all=False)
+        image_set='val', weights_name='trained_stage_3_best.h5', save_all=False)
+    # '''
 
 if __name__ == "__main__":
     main()
