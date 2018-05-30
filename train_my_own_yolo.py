@@ -227,7 +227,7 @@ def create_model(anchors, class_names, regions, load_pretrained=True, freeze_bod
 # def model_loss():
 
 
-def train(model, class_names, anchors, image_data, boxes, detectors_mask, matching_true_boxes, regions, validation_split=0.1):
+def initial_train(model, class_names, anchors, image_data, boxes, detectors_mask, matching_true_boxes, regions, validation_split=0.1):
     '''
 
     :param model:
@@ -245,7 +245,13 @@ def train(model, class_names, anchors, image_data, boxes, detectors_mask, matchi
     checkpoint = ModelCheckpoint("trained_stage_3_best.h5", monitor='val_loss',
                                  save_weights_only=True, save_best_only=True)
     early_stopping = EarlyStopping(monitor='val_loss', min_delta=0, patience=15, verbose=1, mode='auto')
-    model.fit([image_data, boxes, detectors_mask, matching_true_boxes], np.zeros(len(image_data)), validation_split=validation_split, batch_size=32, epochs=5, callbacks=[logging])
+    model.fit([image_data, boxes, detectors_mask, matching_true_boxes],
+              np.zeros(len(image_data)),
+              validation_split=validation_split,
+              batch_size=32,
+              epochs=5,
+              callbacks=[logging])
+
     model.save_weights('trained_stage_1.h5')
 
     model_body, model = create_model(anchors, class_names, regions, load_pretrained=False, freeze_body=False)
@@ -254,7 +260,7 @@ def train(model, class_names, anchors, image_data, boxes, detectors_mask, matchi
     model.fit([image_data, boxes, detectors_mask, matching_true_boxes],
               np.zeros(len(image_data)),
               validation_split=validation_split,
-              batch_size=None,
+              batch_size=8,
               epochs=30,
               callbacks=[logging])
     model.save_weights('trained_stage_2.h5')
@@ -262,10 +268,48 @@ def train(model, class_names, anchors, image_data, boxes, detectors_mask, matchi
     model.fit([image_data, boxes, detectors_mask, matching_true_boxes],
               np.zeros(len(image_data)),
               validation_split=validation_split,
-              batch_size=None,
-              epochs=8,
+              batch_size=8,
+              epochs=30,
               callbacks=[logging, checkpoint, early_stopping])
     model.save_weights('trained_stage_3.h5')
+    return model
+
+def recur_train(model, class_names, anchors, image_data, boxes, detectors_mask, matching_true_boxes, regions, validation_split=0.1):
+    '''
+
+    :param model:
+    :param class_names:
+    :param anchors:
+    :param image_data:
+    :param boxes:
+    :param detectors_mask:
+    :param matching_true_boxes:
+    :param validation_split:
+    :return:
+    '''
+    model.compile(optimizer='adam', loss={'yolo_loss':lambda y_true, y_pred: y_pred})
+    logging = TensorBoard()
+    checkpoint = ModelCheckpoint("trained_stage_3_best.h5", monitor='val_loss',
+                                 save_weights_only=True, save_best_only=True)
+    early_stopping = EarlyStopping(monitor='val_loss', min_delta=0, patience=15, verbose=1, mode='auto')
+
+    model.compile(optimizer='adam', loss={'yolo_loss':lambda y_true, y_pred: y_pred})
+    model.fit([image_data, boxes, detectors_mask, matching_true_boxes],
+              np.zeros(len(image_data)),
+              validation_split=validation_split,
+              batch_size=8,
+              epochs=30,
+              callbacks=[logging])
+    model.save_weights('trained_stage_2.h5')
+
+    model.fit([image_data, boxes, detectors_mask, matching_true_boxes],
+              np.zeros(len(image_data)),
+              validation_split=validation_split,
+              batch_size=8,
+              epochs=30,
+              callbacks=[logging, checkpoint, early_stopping])
+    model.save_weights('trained_stage_3.h5')
+    return model
 
 def draw(model_body, class_names, anchors, image_data, image_set='val',
             weights_name='trained_stage_3_best.h5', out_path="output_images", save_all=True):
@@ -347,8 +391,7 @@ def get_class_names(class_name_path):
     return classes.split('\n')[:-1]
 
 def get_regions(region):
-    regions = args.regions
-    regions = regions.split('|')
+    regions = region.split('*')
     regions = [int(i) for i in regions]
     return regions
 
@@ -364,20 +407,25 @@ def main():
     max_batches = int(args.max_batches)
 
     anchors = get_anchors(anchors_path, regions)
+    model_body, model = create_model(anchors, class_names, regions)
+
     if not max_batches:
         max_batches = get_max_batches(image_path, batch_size)
-    for i in range(max_batches):
-        if i == 0:
-            model_body, model = create_model(anchors, class_names, regions)
-        else:
-            model_body, model = create_model(anchors, class_names, regions, load_pretrained=False, freeze_body=False)
-            model.load_weights('trained_stage_3_best.h5')
+
+    processed_images, processed_labels = process_data(image_path, label_path, starting_file,
+                                                      batch_size, regions)
+    # '''
+    detectors_mask, matching_true_boxes = get_detector_mask(processed_labels, anchors, regions)
+    model = initial_train(model, class_names, anchors, processed_images, processed_labels,
+          detectors_mask, matching_true_boxes, regions)
+
+    for i in range(1, max_batches):
         processed_images, processed_labels = process_data(image_path, label_path, starting_file+i*batch_size, batch_size, regions)
         detectors_mask, matching_true_boxes = get_detector_mask(processed_labels, anchors, regions)
-        train(model, class_names, anchors, processed_images, processed_labels,
+        model = recur_train(model, class_names, anchors, processed_images, processed_labels,
               detectors_mask, matching_true_boxes, regions)
 
-
+    # '''
     draw(model_body, class_names, anchors, processed_images,
          image_set='val', weights_name='trained_stage_3_best.h5', save_all=False)
 
