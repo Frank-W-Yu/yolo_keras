@@ -69,6 +69,9 @@ def draw_boxes(image, boxes, box_classes, class_names, scores=None):
         bottom = min(image.size[1], np.floor(bottom + 0.5).astype('int32'))
         right = min(image.size[0], np.floor(right + 0.5).astype('int32'))
         print(label, (left, top), (right, bottom))
+        with open('../../log.txt', 'a') as f:
+            f.write('{} ({} {}) ({} {})\n'.format(label, left, top, right, bottom))
+            f.close()
 
         if top - label_size[1] >= 0:
             text_origin = np.array([left, top - label_size[1]])
