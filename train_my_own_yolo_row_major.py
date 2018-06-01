@@ -30,6 +30,7 @@ def parse_args():
     argparser.add_argument('-m', '--max_batches', default=0)
     argparser.add_argument('-r', '--regions', default=[13, 13])
     argparser.add_argument('-p', '--load_previous_trained', default='F')
+    argparser.add_argument('-w', '--weights2load', default='trained_stage_3_best.h5')
     args = argparser.parse_args()
     return args
 
@@ -409,12 +410,13 @@ def main():
     anchors_path = args.anchors_path
     max_batches = int(args.max_batches)
     previous_train = args.load_previous_trained
+    weights2load = args.weights2load
 
     anchors = get_anchors(anchors_path, regions)
 
     if previous_train == 'T':
         model_body, model = create_model(anchors, class_names, regions, load_pretrained=False, freeze_body=False)
-        model.load_weights('trained_stage_3_best.h5')
+        model.load_weights(weights2load)
     else:
         model_body, model = create_model(anchors, class_names, regions)
 

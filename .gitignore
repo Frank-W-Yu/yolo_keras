@@ -2,3 +2,4 @@
 /logs/*
 /output_images/*
 *.h5
+*.sh

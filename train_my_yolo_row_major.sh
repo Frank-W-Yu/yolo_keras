@@ -1,1 +1,1 @@
-python train_my_own_yolo_row_major.py -i /home/rma_lab/frank/KA/train_color/ -l /home/rma_lab/frank/KA/train_label_text/ -a /home/rma_lab/frank/KA/yolo_utils/anchors.txt -c /home/rma_lab/frank/KA/yolo_utils/class_names.txt -b 10 -m 0 -r 13*13 -p T -s 0
+python train_my_own_yolo_row_major.py -i /home/rma_lab/frank/KA/train_color/ -l /home/rma_lab/frank/KA/train_label_text/ -a /home/rma_lab/frank/KA/yolo_utils/anchors.txt -c /home/rma_lab/frank/KA/yolo_utils/class_names.txt -b 10 -m 0 -r 13*13 -p T -s 0 -w trained_stage_3_best_13_13.h5
