@@ -13,6 +13,7 @@ from keras.models import load_model, Model
 from keras.callbacks import TensorBoard, ModelCheckpoint, EarlyStopping
 from yad2k.models.keras_yolo import (yolo_body, yolo_eval, yolo_head, yolo_loss)
 from yad2k.utils.draw_boxes import draw_boxes
+from datetime import datetime
 
 def parse_args():
     '''
@@ -350,7 +351,6 @@ def draw(model_body, class_names, anchors, image_data, image_set='val',
             })
         print('Found {} boxes for image.'.format(len(out_boxes)))
         print(out_boxes)
-
         # Plot image with predicted boxes.
         image_with_boxes = draw_boxes(image_data[i][0], out_boxes, out_classes,
                                     class_names, out_scores)
@@ -413,6 +413,9 @@ def main():
 
     anchors = get_anchors(anchors_path, regions)
 
+    log = open('log.txt', 'a')
+    log.write(str(datetime.now())+'\n')
+    log.close()
     if previous_train == 'T':
         model_body, model = create_model(anchors, class_names, regions, load_pretrained=False, freeze_body=False)
         model.load_weights('trained_stage_3_best.h5')
