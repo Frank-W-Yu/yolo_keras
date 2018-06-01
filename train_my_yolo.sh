@@ -1,1 +1,1 @@
-python train_my_own_yolo.py -i /home/rma_lab/frank/KA/train_color/ -l /home/rma_lab/frank/KA/train_label_text/ -a /home/rma_lab/frank/KA/yolo_utils/anchors.txt -c /home/rma_lab/frank/KA/yolo_utils/class_names.txt -b 10 -m 10 -r 25*25 -p T -s 2
+python train_my_own_yolo.py -i /home/rma_lab/frank/KA/train_color/ -l /home/rma_lab/frank/KA/train_label_text/ -a /home/rma_lab/frank/KA/yolo_utils/anchors.txt -c /home/rma_lab/frank/KA/yolo_utils/class_names.txt -b 10 -m 0 -r 25*25 -p F -s 10

@@ -62,7 +62,8 @@ def process_data(image_path, label_path, starting_file, batch_size, regions):
         for line in lines:
             params = line.split(' ')
             if len(params) == 5:
-                labels.append(params[1:]+params[0:1])
+                # labels.append(params[1:]+params[0:1])
+                labels.append([params[2], params[1], params[4], params[3], params[0]])
         all_labels.append(np.array(labels, dtype=np.float32).reshape((-1, 5)))
         if len(labels) > max_labels:
             max_labels = len(labels)
@@ -133,14 +134,14 @@ def preprocess_true_boxes(true_boxes, anchors, regions):
     """
     num_anchors = len(anchors)
     num_box_params = true_boxes.shape[1]
-    conv_height, conv_width = regions
+    conv_width, conv_height = regions
     detector_mask = np.zeros((conv_height, conv_width, num_anchors, 1), dtype=np.float32)
     matching_true_boxes = np.zeros((conv_height, conv_width, num_anchors, num_box_params), dtype=np.float32)
     for box in true_boxes:
         cls = box[4:5]
-        box = box[0:4] * np.array([conv_width, conv_height, conv_width, conv_height])
-        i = np.floor(box[1]).astype('int')
-        j = np.floor(box[0]).astype('int')
+        box = box[0:4] * np.array([conv_height, conv_width, conv_height, conv_width])
+        i = np.floor(box[0]).astype('int')
+        j = np.floor(box[1]).astype('int')
         best_iou = 0
         best_anchor = 0
         for k, anchor in enumerate(anchors):
@@ -162,7 +163,7 @@ def preprocess_true_boxes(true_boxes, anchors, regions):
 
         if best_iou > 0:
             detector_mask[i, j, best_anchor] = 1
-            adjusted_box = np.array([box[0]-j, box[1]-i,
+            adjusted_box = np.array([box[0]-i, box[1]-j,
                                      np.log(box[2]/anchors[best_anchor][0]),
                                      np.log(box[3]/anchors[best_anchor][1]), cls],
                                     dtype=np.float32)
@@ -184,11 +185,11 @@ def create_model(anchors, class_names, regions, load_pretrained=True, freeze_bod
     conv_x, conv_y = regions
     num_anchors = len(anchors)
     x_shape, y_shape = conv_x * 32, conv_y * 32
-    detectors_mask_shape = (conv_x, conv_y, 5, 1)
-    matching_boxes_shape = (conv_x, conv_y, 5, num_anchors)
+    detectors_mask_shape = (conv_y, conv_x, 5, 1)
+    matching_boxes_shape = (conv_y, conv_x, 5, num_anchors)
 
     # Create model input layers
-    image_input = Input(shape=(x_shape, y_shape, 3))
+    image_input = Input(shape=(y_shape, x_shape, 3))
     boxes_input = Input(shape=(None, 5))
     detectors_mask_input = Input(shape=detectors_mask_shape)
     matching_boxes_input = Input(shape=matching_boxes_shape)
@@ -225,9 +226,6 @@ def create_model(anchors, class_names, regions, load_pretrained=True, freeze_bod
 
     return model_body, model
 
-# def model_loss():
-
-
 def initial_train(model, class_names, anchors, image_data, boxes, detectors_mask, matching_true_boxes, regions, validation_split=0.1):
     '''
 
@@ -246,6 +244,7 @@ def initial_train(model, class_names, anchors, image_data, boxes, detectors_mask
     checkpoint = ModelCheckpoint("trained_stage_3_best.h5", monitor='val_loss',
                                  save_weights_only=True, save_best_only=True)
     early_stopping = EarlyStopping(monitor='val_loss', min_delta=0, patience=15, verbose=1, mode='auto')
+    # print(image_data.shape)
     model.fit([image_data, boxes, detectors_mask, matching_true_boxes],
               np.zeros(len(image_data)),
               validation_split=validation_split,
@@ -312,7 +311,7 @@ def recur_train(model, class_names, anchors, image_data, boxes, detectors_mask, 
     model.save_weights('trained_stage_3.h5')
     return model
 
-def draw(model_body, class_names, anchors, image_data, image_set='val',
+def draw(model_body, class_names, anchors, image_data, n_epoch, image_set='val',
             weights_name='trained_stage_3_best.h5', out_path="output_images", save_all=True):
     '''
     Draw bounding boxes on image data
@@ -357,7 +356,7 @@ def draw(model_body, class_names, anchors, image_data, image_set='val',
         # Save the image:
         if save_all or (len(out_boxes) > 0):
             image = PIL.Image.fromarray(image_with_boxes)
-            image.save(os.path.join(out_path,str(i)+'.png'))
+            image.save(os.path.join(out_path,str(i)+'_'+str(n_epoch)+'.png'))
 
         # To display (pauses the program):
         # plt.imshow(image_with_boxes, interpolation='nearest')
@@ -372,7 +371,7 @@ def get_anchors(anchors_path, region):
     for anchor_pair in anchor_pairs:
         anchor = np.array(anchor_pair.split(' '), dtype=np.float32)
         anchor = anchor * np.array(region)
-        anchors.append(anchor)
+        anchors.append(anchor[::-1])
     return np.array(anchors)
 
 def get_max_batches(image_path, batch_size):
@@ -424,11 +423,7 @@ def main():
 
     processed_images, processed_labels = process_data(image_path, label_path, starting_file,
                                                       batch_size, regions)
-    # draw(model_body, class_names, anchors, processed_images,
-    #      image_set='val', weights_name='trained_stage_3.h5', save_all=False)
-    # '''
     detectors_mask, matching_true_boxes = get_detector_mask(processed_labels, anchors, regions)
-    print('*'*10, 'Start Initial Training', '*'*10)
     model = initial_train(model, class_names, anchors, processed_images, processed_labels,
           detectors_mask, matching_true_boxes, regions)
 
@@ -440,7 +435,7 @@ def main():
               detectors_mask, matching_true_boxes, regions)
 
         if i % 10 == 0:
-            draw(model_body, class_names, anchors, processed_images,
+            draw(model_body, class_names, anchors, processed_images, i,
                 image_set='val', weights_name='trained_stage_3_best.h5', save_all=False)
     # '''
 
