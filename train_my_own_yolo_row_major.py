@@ -50,6 +50,7 @@ def process_data(image_path, label_path, starting_file, batch_size, regions):
     all_labels = []
     fns = os.listdir(image_path)
     max_labels = 0
+    # cls_dict = {33:0, 34}
 
     for fn in fns[starting_file: starting_file+batch_size]:
         labels = []
@@ -57,14 +58,18 @@ def process_data(image_path, label_path, starting_file, batch_size, regions):
         txt_fn = str(label_path) + str(fn.split('.')[0]) + '.txt'
         with open(txt_fn, 'r') as f:
             label_txt = f.read()
-            lines = label_txt.split('\n')
+            if '\n\n' in label_txt:
+                lines = label_txt.split('\n\n')
+            else:
+                lines = label_txt.split('\n')
             f.close()
 
         for line in lines:
             params = line.split(' ')
             if len(params) == 5:
                 # labels.append(params[1:]+params[0:1])
-                labels.append([params[2], params[1], params[4], params[3], params[0]])
+                cls = int(params[0]) - 33
+                labels.append([params[2], params[1], params[4], params[3], cls])
         all_labels.append(np.array(labels, dtype=np.float32).reshape((-1, 5)))
         if len(labels) > max_labels:
             max_labels = len(labels)
