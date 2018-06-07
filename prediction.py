@@ -480,14 +480,15 @@ def prediction():
         out_boxes, out_scores, out_classes = sess.run([boxes, scores, classes], feed_dict={model_body.input:image_data[0], input_image_shape: [image_data.shape[2], image_data.shape[3]], K.learning_phase(): 0})
         for i in range(len(out_boxes)):
             top, left, bottom, right = out_boxes[i]
-            w, h = right - left + 1, bottom - top + 1
+            w, h = int(right - left + 1), int(bottom - top + 1)
             count = w * h
             label_id = out_classes[i] + 33
             confidence = out_scores[i]
-            encode = '{} {}|{} {}'.format(left, w, top, h)
+            encode = '{} {}|{} {}'.format(int(left), int(w), int(top), int(h))
             line = '{},{},{},{},{}\n'.format(image_id,label_id, confidence, count, encode)
             f.write(line)
         print('find {} object on {}th image: {}'.format(len(out_classes), k, fn))
+        k += 1
     f.close()
 
 if __name__ == "__main__":
